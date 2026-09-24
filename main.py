@@ -1,5 +1,9 @@
+import redis
+
 BLOCK_LIMIT = 500000
 REVIEW_LIMIT = 100000
+
+r = redis.Redis(host = "localhost", port = 6379, decode_responses = True)
 
 transactions = [
     # --- Обычные проверки: сумма и город ---
@@ -37,8 +41,6 @@ home_cities = {
     "Baurzhan" : "Oskemen"
 }
 
-history = {}
-
 def check_amount(tx: dict) -> str:
     #Если сумма превышает лимит по транзакциям то блокируется
     if tx["amount"] > BLOCK_LIMIT:
@@ -62,19 +64,23 @@ def check_city(tx: dict) -> str:
     return "approve"
 
 def get_history(tx: dict) -> list:
-    return history.get(tx["client"],[])
+    historyStr = r.lrange(history_key(tx),0,-1)
+
+    historyInt = []
+    for h in historyStr:
+        historyInt.append(int(h))
+
+    return historyInt
 
 def add_history(tx: dict) -> None:
-    if get_history(tx) == []:
-        history[tx["client"]] = [tx["minute"]]
-    else:
-        history[tx["client"]].append(tx["minute"])
+    r.rpush(history_key(tx),tx["minute"])
+
+def history_key(tx: dict) -> str:
+    return f"history:{tx['client']}"
 
 def check_velocity(tx: dict) -> str:
     times = get_history(tx)
-    if times == []:
-        return "approve"
-
+    
     count = 0
     for t in times:
         if t > tx["minute"] - 10:
@@ -97,6 +103,8 @@ def score(tx: dict) -> str:
         return "review"
     else:
         return "approve"
+
+r.flushdb()
 
 for tx in transactions:
     print(f'Платеж {tx["id"]} ({tx["client"]}, {tx["amount"]}): {score(tx)}')
