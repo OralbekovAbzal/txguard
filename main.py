@@ -3,6 +3,10 @@ import redis
 BLOCK_LIMIT = 500000
 REVIEW_LIMIT = 100000
 
+VELOCITY_WINDOW = 10
+VELOCITY_LIMIT = 3
+HISTORY_TTL = 600
+
 r = redis.Redis(host = "localhost", port = 6379, decode_responses = True)
 
 transactions = [
@@ -74,19 +78,21 @@ def get_history(tx: dict) -> list:
 
 def add_history(tx: dict) -> None:
     r.rpush(history_key(tx),tx["minute"])
+    r.ltrim(history_key(tx),-VELOCITY_LIMIT,-1)
+    r.expire(history_key(tx),HISTORY_TTL)
 
 def history_key(tx: dict) -> str:
     return f"history:{tx['client']}"
 
 def check_velocity(tx: dict) -> str:
     times = get_history(tx)
-    
+
     count = 0
     for t in times:
-        if t > tx["minute"] - 10:
+        if t > tx["minute"] - VELOCITY_WINDOW:
             count+=1
     
-    if count > 2:
+    if count >= VELOCITY_LIMIT:
         return "review"
 
     return "approve"
