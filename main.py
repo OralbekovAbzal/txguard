@@ -101,4 +101,3 @@ def score(tx: dict) -> str:
 for tx in transactions:
     print(f'Платеж {tx["id"]} ({tx["client"]}, {tx["amount"]}): {score(tx)}')
     add_history(tx)
-print(history)
