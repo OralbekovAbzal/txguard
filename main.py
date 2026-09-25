@@ -110,8 +110,10 @@ def score(tx: dict) -> str:
     else:
         return "approve"
 
-r.flushdb()
 
-for tx in transactions:
-    print(f'Платеж {tx["id"]} ({tx["client"]}, {tx["amount"]}): {score(tx)}')
-    add_history(tx)
+if __name__ == "__main__":
+    r.flushdb()
+
+    for tx in transactions:
+        print(f'Платеж {tx["id"]} ({tx["client"]}, {tx["amount"]}): {score(tx)}')
+        add_history(tx)
