@@ -1,4 +1,5 @@
 import redis
+import psycopg
 
 BLOCK_LIMIT = 500000
 REVIEW_LIMIT = 100000
@@ -9,7 +10,9 @@ HISTORY_TTL = 600
 
 r = redis.Redis(host = "localhost", port = 6379, decode_responses = True)
 
-transactions = [
+conn = psycopg.connect("host=localhost port=5432 dbname=txguard user=txguard password=txguard")
+
+"""transactions = [
     # --- Обычные проверки: сумма и город ---
     {"id": 1, "client": "Abzal", "amount": 50000, "city": "Astana", "minute": 600},        # approve: всё нормально
     {"id": 2, "client": "Ansar", "amount": 346000, "city": "Astana", "minute": 601},       # review: сумма > 100 000
@@ -36,14 +39,18 @@ transactions = [
     # --- Граница суммы ---
     {"id": 18, "client": "Assel", "amount": 100000, "city": "Astana", "minute": 720},      # approve: ровно 100 000 — это не "больше"
     {"id": 19, "client": "Assel", "amount": 500000, "city": "Astana", "minute": 725},      # review: ровно 500 000 — не block, но review
-]
+]"""
 
-home_cities = {
-    "Abzal" : "Astana",
-    "Ansar" : "Astana",
-    "Assel" : "Astana",
-    "Baurzhan" : "Oskemen"
-}
+def save_transaction(tx: dict, dec: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute("insert into transactions (client_id,city,decision,minute,amount) values (%s,%s,%s,%s,%s)",(tx["client_id"],tx["city"],dec,tx["minute"],tx["amount"]))
+        conn.commit()
+
+def client_exists(client_id: int) -> bool:
+    with conn.cursor() as cur:
+        cur.execute("select name from clients where id=%s",(client_id,))
+        name = cur.fetchone()
+        return name is not None
 
 def check_amount(tx: dict) -> str:
     #Если сумма превышает лимит по транзакциям то блокируется
@@ -55,8 +62,17 @@ def check_amount(tx: dict) -> str:
         return "review"
     return "approve"
 
+def get_home_city(client_id: int) -> str:
+    with conn.cursor() as cur:
+        cur.execute("select home_city from clients where id=%s",(client_id,))
+        home_city = cur.fetchone()
+        if home_city is None:
+            return None
+        else:
+            return home_city[0]
+
 def check_city(tx: dict) -> str:
-    home = home_cities.get(tx["client"])
+    home = get_home_city(tx["client_id"])
     #Если у транзакции нету города то идет на проверку
     if home is None:
         return "review"
@@ -82,7 +98,7 @@ def add_history(tx: dict) -> None:
     r.expire(history_key(tx),HISTORY_TTL)
 
 def history_key(tx: dict) -> str:
-    return f"history:{tx['client']}"
+    return f"history:{tx['client_id']}"
 
 def check_velocity(tx: dict) -> str:
     times = get_history(tx)
