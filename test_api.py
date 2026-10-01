@@ -3,7 +3,7 @@ from api import app
 from main import BLOCK_LIMIT
 
 client = TestClient(app)
-tx_test = {"id": 1, "client_id": 1, "amount": 50000, "city": "Astana", "minute": 600}
+tx_test = {"id": 1, "client_id": 1, "amount": 50000, "city": "Astana", "occurred_at": "2026-10-01T10:01:00+05:00"}
 
 def test_health():
     response = client.get("/health")
@@ -53,3 +53,9 @@ def test_score_four_same_transactions_review(clean_storage):
     response = client.post("/transactions/score",json=tx_test)
     assert response.status_code == 200
     assert response.json() == {"decision": "review"}
+
+def test_score_without_timezone(clean_storage):
+    tx_without_tz = dict(tx_test)
+    tx_without_tz["occurred_at"] = "2026-10-01T10:01:00"
+    response = client.post("/transactions/score",json=tx_without_tz)
+    assert response.status_code == 422

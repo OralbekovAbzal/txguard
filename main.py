@@ -1,10 +1,11 @@
 import redis
 import psycopg
+from datetime import datetime, timezone, timedelta
 
 BLOCK_LIMIT = 500000
 REVIEW_LIMIT = 100000
 
-VELOCITY_WINDOW = 10
+VELOCITY_WINDOW_SEC = 600
 VELOCITY_LIMIT = 3
 HISTORY_TTL = 600
 
@@ -43,7 +44,7 @@ conn = psycopg.connect("host=localhost port=5432 dbname=txguard user=txguard pas
 
 def save_transaction(tx: dict, dec: str) -> None:
     with conn.cursor() as cur:
-        cur.execute("insert into transactions (client_id,city,decision,minute,amount) values (%s,%s,%s,%s,%s)",(tx["client_id"],tx["city"],dec,tx["minute"],tx["amount"]))
+        cur.execute("insert into transactions (client_id,city,decision,occurred_at,amount) values (%s,%s,%s,%s,%s)",(tx["client_id"],tx["city"],dec,tx["occurred_at"],tx["amount"]))
         conn.commit()
 
 def client_exists(client_id: int) -> bool:
@@ -62,7 +63,7 @@ def check_amount(tx: dict) -> str:
         return "review"
     return "approve"
 
-def get_home_city(client_id: int) -> str:
+def get_home_city(client_id: int) -> str | None:
     with conn.cursor() as cur:
         cur.execute("select home_city from clients where id=%s",(client_id,))
         home_city = cur.fetchone()
@@ -93,19 +94,22 @@ def get_history(tx: dict) -> list:
     return historyInt
 
 def add_history(tx: dict) -> None:
-    r.rpush(history_key(tx),tx["minute"])
+    r.rpush(history_key(tx),timestamp_to_sec(tx["occurred_at"]))
     r.ltrim(history_key(tx),-VELOCITY_LIMIT,-1)
     r.expire(history_key(tx),HISTORY_TTL)
 
 def history_key(tx: dict) -> str:
     return f"history:{tx['client_id']}"
 
+def timestamp_to_sec(ts: datetime) -> int:
+    return int(ts.timestamp())
+
 def check_velocity(tx: dict) -> str:
     times = get_history(tx)
 
     count = 0
     for t in times:
-        if t > tx["minute"] - VELOCITY_WINDOW:
+        if t > timestamp_to_sec(tx["occurred_at"]) - VELOCITY_WINDOW_SEC:
             count+=1
     
     if count >= VELOCITY_LIMIT:
@@ -125,11 +129,3 @@ def score(tx: dict) -> str:
         return "review"
     else:
         return "approve"
-
-
-if __name__ == "__main__":
-    r.flushdb()
-
-    for tx in transactions:
-        print(f'Платеж {tx["id"]} ({tx["client"]}, {tx["amount"]}): {score(tx)}')
-        add_history(tx)

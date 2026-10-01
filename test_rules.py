@@ -1,5 +1,8 @@
 import pytest
 from main import check_amount, check_city, check_velocity, add_history, score, r
+from datetime import datetime, timedelta
+
+time = datetime.fromisoformat("2026-10-01T10:01:00+05:00")
 
 #Тесты проверки суммы транзакции
 def test_amount_small_approve():
@@ -32,36 +35,43 @@ def test_city_unknown_client_without_city_review():
 
 #Тесты проверки количество транзакций
 def test_velocity_no_history_approve(clean_storage):
-    assert check_velocity({"client_id": 1,"minute": 100}) == "approve"
+    assert check_velocity({"client_id": 1,"occurred_at": time}) == "approve"
 
 def test_velocity_two_recent_transactions_approve(clean_storage):
-    add_history({"client_id": 1,"minute": 98})
-    add_history({"client_id": 1,"minute": 99})
-    assert check_velocity({"client_id": 1,"minute": 100}) == "approve"
+    add_history({"client_id": 1,"occurred_at": time})
+    add_history({"client_id": 1,"occurred_at": time + timedelta(minutes=1)})
+    assert check_velocity({"client_id": 1,"occurred_at": time + timedelta(minutes=2)}) == "approve"
 
 def test_velocity_three_recent_transactions_review(clean_storage):
-    add_history({"client_id": 1,"minute": 97})
-    add_history({"client_id": 1,"minute": 98})
-    add_history({"client_id": 1,"minute": 99})
-    assert check_velocity({"client_id": 1,"minute": 100}) == "review"
+    add_history({"client_id": 1,"occurred_at": time})
+    add_history({"client_id": 1,"occurred_at": time + timedelta(minutes=1)})
+    add_history({"client_id": 1,"occurred_at": time + timedelta(minutes=2)})
+    assert check_velocity({"client_id": 1,"occurred_at": time + timedelta(minutes=3)}) == "review"
 
 def test_velocity_more_than_10_approve(clean_storage):
-    add_history({"client_id": 1,"minute": 87})
-    add_history({"client_id": 1,"minute": 88})
-    add_history({"client_id": 1,"minute": 89})
-    assert check_velocity({"client_id": 1,"minute": 100}) == "approve"
+    add_history({"client_id": 1,"occurred_at": time})
+    add_history({"client_id": 1,"occurred_at": time + timedelta(minutes=2)})
+    add_history({"client_id": 1,"occurred_at": time + timedelta(minutes=3)})
+    assert check_velocity({"client_id": 1,"occurred_at": time + timedelta(minutes=11)}) == "approve"
 
-def test_velocity_exactly_10_minute_approve(clean_storage):
-    add_history({"client_id": 1,"minute": 90})
-    add_history({"client_id": 1,"minute": 90})
-    add_history({"client_id": 1,"minute": 90})
-    assert check_velocity({"client_id": 1,"minute": 100}) == "approve"
+def test_velocity_exactly_10_occurred_at_approve(clean_storage):
+    add_history({"client_id": 1,"occurred_at": time})
+    add_history({"client_id": 1,"occurred_at": time})
+    add_history({"client_id": 1,"occurred_at": time})
+    assert check_velocity({"client_id": 1,"occurred_at": time + timedelta(minutes=10)}) == "approve"
+
+def test_velocity_midnight_review(clean_storage):
+    midnight_time = datetime.fromisoformat("2026-10-01T23:56:00+05:00")
+    add_history({"client_id": 1,"occurred_at": midnight_time})
+    add_history({"client_id": 1,"occurred_at": midnight_time + timedelta(minutes=2)})
+    add_history({"client_id": 1,"occurred_at": midnight_time + timedelta(minutes=4)})
+    assert check_velocity({"client_id": 1,"occurred_at": midnight_time + timedelta(minutes=6)}) == "review"
 
 def test_score_ideal_approve(clean_storage):
-    assert score({"client_id": 1,"city": "Astana", "amount": 50000, "minute": 100}) == "approve"
+    assert score({"client_id": 1,"city": "Astana", "amount": 50000, "occurred_at": time}) == "approve"
 
 def test_score_amount_over_block_limit_foreign_city_block(clean_storage):
-    assert score({"client_id": 1,"city": "Pavlodar", "amount": 5000000, "minute": 100}) == "block"
+    assert score({"client_id": 1,"city": "Pavlodar", "amount": 5000000, "occurred_at": time}) == "block"
 
 def test_score_foreign_city_review(clean_storage):
-    assert score({"client_id": 1,"city": "Semey", "amount": 50000, "minute": 100}) == "review"
+    assert score({"client_id": 1,"city": "Semey", "amount": 50000, "occurred_at": time}) == "review"
