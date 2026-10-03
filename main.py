@@ -13,35 +13,6 @@ r = redis.Redis(host = "localhost", port = 6379, decode_responses = True)
 
 conn = psycopg.connect("host=localhost port=5432 dbname=txguard user=txguard password=txguard")
 
-"""transactions = [
-    # --- Обычные проверки: сумма и город ---
-    {"id": 1, "client": "Abzal", "amount": 50000, "city": "Astana", "minute": 600},        # approve: всё нормально
-    {"id": 2, "client": "Ansar", "amount": 346000, "city": "Astana", "minute": 601},       # review: сумма > 100 000
-    {"id": 3, "client": "Assel", "amount": 79000, "city": "Pavlodar", "minute": 603},      # review: не свой город
-    {"id": 4, "client": "Unknown", "amount": 70000, "city": None, "minute": 605},          # review: незнакомец без города
-    {"id": 5, "client": "Abzal", "amount": 700000, "city": "Astana", "minute": 606},       # block: сумма > 500 000
-    {"id": 6, "client": "Baurzhan", "amount": 70000, "city": "Oskemen", "minute": 610},    # approve: свой город
-    {"id": 7, "client": "Kto-to", "amount": 20000, "city": "Almaty", "minute": 612},       # review: незнакомый клиент
-
-    # --- Velocity: Baurzhan делает серию мелких платежей подряд ---
-    {"id": 8, "client": "Baurzhan", "amount": 5000, "city": "Oskemen", "minute": 640},     # approve: за 10 мин 0 прошлых
-    {"id": 9, "client": "Baurzhan", "amount": 5000, "city": "Oskemen", "minute": 641},     # approve: 1 прошлый
-    {"id": 10, "client": "Baurzhan", "amount": 5000, "city": "Oskemen", "minute": 642},    # approve: 2 прошлых
-    {"id": 11, "client": "Baurzhan", "amount": 5000, "city": "Oskemen", "minute": 643},    # review: 3 прошлых
-    {"id": 12, "client": "Baurzhan", "amount": 5000, "city": "Oskemen", "minute": 645},    # review: 4 прошлых
-    {"id": 13, "client": "Baurzhan", "amount": 5000, "city": "Oskemen", "minute": 710},    # approve: прошёл час, всё "остыло"
-
-    # --- Velocity: граница "10 минут" ---
-    {"id": 14, "client": "Ansar", "amount": 20000, "city": "Astana", "minute": 700},       # approve
-    {"id": 15, "client": "Ansar", "amount": 20000, "city": "Astana", "minute": 705},       # approve: 1 прошлый
-    {"id": 16, "client": "Ansar", "amount": 20000, "city": "Astana", "minute": 709},       # approve: 2 прошлых
-    {"id": 17, "client": "Ansar", "amount": 20000, "city": "Astana", "minute": 710},       # approve: платёж в 700 ровно 10 мин назад — НЕ считается, остаётся 2
-
-    # --- Граница суммы ---
-    {"id": 18, "client": "Assel", "amount": 100000, "city": "Astana", "minute": 720},      # approve: ровно 100 000 — это не "больше"
-    {"id": 19, "client": "Assel", "amount": 500000, "city": "Astana", "minute": 725},      # review: ровно 500 000 — не block, но review
-]"""
-
 def save_transaction(tx: dict, dec: str) -> None:
     with conn.cursor() as cur:
         cur.execute("insert into transactions (client_id,city,decision,occurred_at,amount) values (%s,%s,%s,%s,%s)",(tx["client_id"],tx["city"],dec,tx["occurred_at"],tx["amount"]))
